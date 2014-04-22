@@ -1,0 +1,11 @@
+ifeq ($(strip $(PYTHON_CONFIG)),)
+PYTHON_CONFIG=python-config
+endif
+
+ifeq ($(strip $(PKG_CPPFLAGS)),)
+PKG_CPPFLAGS=$(shell $(PYTHON_CONFIG) --includes)
+endif
+
+ifeq ($(strip $(PKG_LIBS)),)
+PKG_LIBS=$(shell $(PYTHON_CONFIG) --ldflags)
+endif

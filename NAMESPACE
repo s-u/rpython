@@ -1,0 +1,7 @@
+useDynLib(rpython2, rpy_init, rpy_get, rpy_set, rpy_eval, rpy_import, rpy_as_string, rpy_call, rpy_fetch_ex, rpy_last_ex, rpy_get_attr, rpy_set_attr)
+export(py.init, py.get, py.set, py.eval, py.import, py.call, py.exception, as.pyref, py.last.exception, py.rcaps, py.attr)
+S3method(as.character, pyref)
+S3method(print, pyref)
+S3method(as.pyref, pyref)
+S3method(`$`, pyref)
+S3method(`$<-`, pyref)

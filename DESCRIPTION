@@ -1,0 +1,9 @@
+Package: rpython2
+Version: 0.1-0
+Title: R/Python interface
+Author: Simon Urbanek <simon.urbanek@r-project.org>
+Maintainer: Simon Urbanek <simon.urbanek@r-project.org>
+Depends: R (>= 3.0.0)
+Description: Interface to embed Python and run Python code
+License: MIT
+URL: http://www.rforge.net/rpython
