@@ -198,8 +198,41 @@ static SEXP py_to_sexp(PyObject *o) {
 	if (!n) return allocVector(VECSXP, 0);
 	if (n > 1 && is_homogeneous_tuple(o)) {
 	    PyObject *e0 = PyTuple_GetItem(o, 0);
-	    /* XXXX */
-	}
+	    PyTypeObject *type = e0->ob_type;
+	    int i;
+	    if (type == &PyInt_Type) {
+		if (PyBool_Check(e0)) { /* bool is a subset of int */
+		    int *v;
+		    res = allocVector(LGLSXP, n);
+		    v = (int*) LOGICAL(res);
+		    for (i = 0; i < n; i++)
+			v[i] = PyInt_AS_LONG(PyTuple_GetItem(o, i));
+		    return res;
+		} else {
+		    int *v;
+		    res = allocVector(INTSXP, n);
+		    v = (int*) INTEGER(res);
+		    for (i = 0; i < n; i++)
+			v[i] = PyInt_AS_LONG(PyTuple_GetItem(o, i));
+		    return res;
+		}
+	    } else if (type == &PyLong_Type) {
+		double *v;
+		res = allocVector(REALSXP, n);
+		v = REAL(res);
+		for (i = 0; i < n; i++)
+		    v[i] = PyLong_AsDouble(PyTuple_GetItem(o, i));
+		return res;
+	    } else if (type == &PyFloat_Type) {
+		double *v;
+		res = allocVector(REALSXP, n);
+		v = REAL(res);
+		for (i = 0; i < n; i++)
+		    v[i] = PyFloat_AS_DOUBLE(PyTuple_GetItem(o, i));
+		return res;
+	    }
+	} /* homogeneous */
+
 	res = PROTECT(allocVector(VECSXP, n));
 	for (i = 0; i < n; i++)
 	    SET_VECTOR_ELT(res, i, py_to_sexp(PyTuple_GetItem(o, i)));
@@ -208,12 +241,52 @@ static SEXP py_to_sexp(PyObject *o) {
     }
     if (PyList_Check(o)) {
 	int n = PyList_GET_SIZE(o), i;
-	SEXP res = PROTECT(allocVector(VECSXP, n));
+	SEXP res;
+	if (!n) return allocVector(VECSXP, 0);
+	if (n > 1 && is_homogeneous_list(o)) {
+	    PyObject *e0 = PyList_GetItem(o, 0);
+	    PyTypeObject *type = e0->ob_type;
+	    int i;
+	    if (type == &PyInt_Type) {
+		if (PyBool_Check(e0)) { /* bool is a subset of int */
+		    int *v;
+		    res = allocVector(LGLSXP, n);
+		    v = (int*) LOGICAL(res);
+		    for (i = 0; i < n; i++)
+			v[i] = PyInt_AS_LONG(PyList_GetItem(o, i));
+		    return res;
+		} else {
+		    int *v;
+		    res = allocVector(INTSXP, n);
+		    v = (int*) INTEGER(res);
+		    for (i = 0; i < n; i++)
+			v[i] = PyInt_AS_LONG(PyList_GetItem(o, i));
+		    return res;
+		}
+	    } else if (type == &PyLong_Type) {
+		double *v;
+		res = allocVector(REALSXP, n);
+		v = REAL(res);
+		for (i = 0; i < n; i++)
+		    v[i] = PyLong_AsDouble(PyList_GetItem(o, i));
+		return res;
+	    } else if (type == &PyFloat_Type) {
+		double *v;
+		res = allocVector(REALSXP, n);
+		v = REAL(res);
+		for (i = 0; i < n; i++)
+		    v[i] = PyFloat_AS_DOUBLE(PyList_GetItem(o, i));
+		return res;
+	    }
+	} /* homogeneous */
+	
+	res = PROTECT(allocVector(VECSXP, n));
 	for (i = 0; i < n; i++)
 	    SET_VECTOR_ELT(res, i, py_to_sexp(PyList_GetItem(o, i)));
 	UNPROTECT(1);
 	return res;
     }
+
     /* we map dicts to lists - we could also use envs instead that may be closer in spirit... */
     if (PyDict_Check(o)) {
 	int n = PyDict_Size(o), i;
@@ -363,6 +436,52 @@ static PyObject *to_pyref(SEXP sWhat) {
 	    o = PyTuple_New(n);
 	    for (i = 0; i < n; i++)
 		PyTuple_SetItem(o, i, PyFloat_FromDouble(d[i]));
+	    return o;
+	}
+    }
+    if (TYPEOF(sWhat) == INTSXP) {
+	SEXP sNames;
+	int i, n = LENGTH(sWhat);
+	PyObject *o;
+	int *v = INTEGER(sWhat);
+	if ((sNames = getAttrib(sWhat, R_NamesSymbol)) != R_NilValue) {
+	    if (LENGTH(sNames) != LENGTH(sWhat))
+		Rf_error("names mismatch");
+	    o = PyDict_New();
+	    for (i = 0; i < n; i++) /* FIXME: what do we do with NAs? */
+		PyDict_SetItemString(o, CHAR(STRING_ELT(sNames, i)), PyInt_FromLong(v[i]));
+	    return o;
+	} else {
+	    PyObject *o;
+	    /* python doesn't have proper vector support so we have to worry about scalars ...*/
+	    if (n == 1)
+		return PyInt_FromLong(v[0]);
+	    o = PyTuple_New(n);
+	    for (i = 0; i < n; i++)
+		PyTuple_SetItem(o, i, PyInt_FromLong(v[i]));
+	    return o;
+	}
+    }
+    if (TYPEOF(sWhat) == LGLSXP) {
+	SEXP sNames;
+	int i, n = LENGTH(sWhat);
+	PyObject *o;
+	int *v = LOGICAL(sWhat);
+	if ((sNames = getAttrib(sWhat, R_NamesSymbol)) != R_NilValue) {
+	    if (LENGTH(sNames) != LENGTH(sWhat))
+		Rf_error("names mismatch");
+	    o = PyDict_New();
+	    for (i = 0; i < n; i++) /* FIXME: what do we do with NAs? */
+		PyDict_SetItemString(o, CHAR(STRING_ELT(sNames, i)), PyBool_FromLong(v[i]));
+	    return o;
+	} else {
+	    PyObject *o;
+	    /* python doesn't have proper vector support so we have to worry about scalars ...*/
+	    if (n == 1)
+		return PyBool_FromLong(v[0]);
+	    o = PyTuple_New(n);
+	    for (i = 0; i < n; i++)
+		PyTuple_SetItem(o, i, PyBool_FromLong(v[i]));
 	    return o;
 	}
     }
