@@ -15,7 +15,7 @@ py.load <- function(source, quiet=FALSE) {
   py.eval(paste(x, collapse="\n"), quiet=quiet)
 }
 
-py.call <- function(callable, ..., .ref=FALSE) .External(rpy_call, callable, ..., .ref)
+py.call <- function(callable, ..., .ref=FALSE) .External(rpy_call, callable, ..., .ref = .ref)
 
 ## FIXME: this should not be needed since we're mapping exceptions, but jsut in case ...
 py.exception <- function() .Call(rpy_fetch_ex)
