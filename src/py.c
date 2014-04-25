@@ -230,6 +230,12 @@ static SEXP py_to_sexp(PyObject *o) {
 		for (i = 0; i < n; i++)
 		    v[i] = PyFloat_AS_DOUBLE(PyTuple_GetItem(o, i));
 		return res;
+	    } else if (type == &PyString_Type) {
+		res = PROTECT(allocVector(STRSXP, n));
+		for (i = 0; i < n; i++)
+		    SET_STRING_ELT(res, i, mkChar(PyString_AsString(PyTuple_GetItem(o, i))));
+		UNPROTECT(1);
+		return res;
 	    }
 	} /* homogeneous */
 
@@ -276,6 +282,12 @@ static SEXP py_to_sexp(PyObject *o) {
 		v = REAL(res);
 		for (i = 0; i < n; i++)
 		    v[i] = PyFloat_AS_DOUBLE(PyList_GetItem(o, i));
+		return res;
+	    } else if (type == &PyString_Type) {
+		res = PROTECT(allocVector(STRSXP, n));
+		for (i = 0; i < n; i++)
+		    SET_STRING_ELT(res, i, mkChar(PyString_AsString(PyList_GetItem(o, i))));
+		UNPROTECT(1);
 		return res;
 	    }
 	} /* homogeneous */
@@ -483,6 +495,24 @@ static PyObject *to_pyref(SEXP sWhat) {
 	    o = PyTuple_New(n);
 	    for (i = 0; i < n; i++)
 		PyTuple_SetItem(o, i, PyBool_FromLong(v[i]));
+	    return o;
+	}
+    }
+    if (TYPEOF(sWhat) == VECSXP) {
+	SEXP sNames;
+	int i, n = LENGTH(sWhat);
+	PyObject *o;	
+	if ((sNames = getAttrib(sWhat, R_NamesSymbol)) != R_NilValue) {
+	    if (LENGTH(sNames) != LENGTH(sWhat))
+		Rf_error("names mismatch");
+	    o = PyDict_New();
+	    for (i = 0; i < n; i++) /* FIXME: what do we do with NAs? */
+		PyDict_SetItemString(o, CHAR(STRING_ELT(sNames, i)), to_pyref(VECTOR_ELT(sWhat, i)));
+	    return o;
+	} else {
+	    o = PyTuple_New(n);
+	    for (i = 0; i < n; i++)
+		PyTuple_SetItem(o, i, to_pyref(VECTOR_ELT(sWhat, i)));
 	    return o;
 	}
     }
