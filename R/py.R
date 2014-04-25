@@ -33,5 +33,5 @@ as.pyref <- function(x) UseMethod("as.pyref")
 
 as.pyref.pyref <- function(x) x
 
-`$.pyref` <- function(x, name) .Call(rpy_get_attr, x, name, FALSE)
+`$.pyref` <- function(x, name) .Call(rpy_get_attr, x, name, FALSE, FALSE)
 `$<-.pyref` <- function(x, name, value) invisible(.Call(rpy_set_attr, x, name, value))
