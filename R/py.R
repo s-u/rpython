@@ -8,7 +8,7 @@ py.rcaps <- function(x) .Call(rpy_rcaps, x)
 
 py.import <- function(module) invisible(.Call(rpy_import, module))
 
-py.eval <- function(code, globals=NULL, locals=NULL, quiet=FALSE) .Call(rpy_eval, code, globals, locals, !quiet)
+py.eval <- function(code, globals=NULL, locals=NULL, quiet=FALSE) invisible(.Call(rpy_eval, code, globals, locals, !quiet))
 
 py.load <- function(source, quiet=FALSE) {
   x <- readLines(source)
