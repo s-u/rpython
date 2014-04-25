@@ -181,8 +181,6 @@ static SEXP py_scalar(PyObject *o) {
     return 0;
 }
 
-static PyTypeObject *builtin_function_or_method;
-
 /* simplify - very crude for now */
 static SEXP py_to_sexp(PyObject *o) {
     SEXP res;
@@ -303,21 +301,8 @@ static SEXP py_to_sexp(PyObject *o) {
 	UNPROTECT(1);
 	return res;
     }
-    /* this is really annoying - PyFunction_Check() is false for built-ins
-       and I cannot find any API to get the BuiltinFunctionType object
-       through the C API so we have to hack it out */
-    if (!builtin_function_or_method) {
-	PyObject *o = PyImport_ImportModule("__builtin__");
-	if (o) {
-	    o = PyModule_GetDict(o);
-	    if (o) {
-		o = PyDict_GetItemString(o, "len");
-		if (o)
-		    builtin_function_or_method = o->ob_type;
-	    }
-	}
-    }
-    if (PyFunction_Check(o) || (builtin_function_or_method && PyType_IsSubtype(o->ob_type, builtin_function_or_method))) {
+    /* callable objects */
+    if (PyFunction_Check(o) || PyObject_HasAttrString(o, "__call__")) {
 	/* FIXME: we shoudl eval in our namespace */
 	SEXP fargs = PROTECT(list1(R_MissingArg)), res;
 	SEXP py_call = PROTECT(lang3(install("py.call"), wrap_py(o), R_DotsSymbol));
