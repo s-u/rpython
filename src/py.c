@@ -67,7 +67,7 @@ SEXP rpy_init(SEXP sPyHome, SEXP sPyProgram) {
     }
     if (TYPEOF(sPyProgram) == STRSXP && LENGTH(sPyProgram) > 0) {
 	pyprog_buf = strdup(CHAR(STRING_ELT(sPyProgram, 0)));
-	Py_SetPythonHome(pyprog_buf);
+	Py_SetProgramName(pyprog_buf);
     }
     /* init - don't let python mess with signals */
     Py_InitializeEx(0);
