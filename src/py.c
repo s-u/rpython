@@ -103,14 +103,22 @@ static PyObject *get_module_dict(SEXP sModule) {
 	    return o;
 	if (o && PyModule_Check(o)) {
 	    o = PyModule_GetDict(o);
-	    if (!o)
-		Rf_error("cannot get dictionary of the module");
+	    chk_ex(o);
 	    return o;
 	}
 	/* FIXME: do we need to hold on the dict ref? We could simply wrap it if we have to. */
     } else if (sModule == R_NilValue)
 	return get_main_dict();
-    
+    else if (TYPEOF(sModule) == STRSXP && LENGTH(sModule) == 1) {
+	PyObject *o = PyImport_ImportModule(CHAR(STRING_ELT(sModule, 0)));
+	chk_ex(o);
+	if (o && PyModule_Check(o)) {
+	    o = PyModule_GetDict(o);
+	    chk_ex(o);
+	    return o;
+	}
+    }
+
     Rf_error("invalid module");
     return 0; /* not reached */
 }
