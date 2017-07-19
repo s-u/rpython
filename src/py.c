@@ -5,7 +5,12 @@
 #if PY_MAJOR_VERSION >= 3
 #define PyString_Check PyBytes_Check
 #define PyString_AsString PyBytes_AsString
+#define PyString_Type PyBytes_Type
 #define PyStr2UTF8 PyUnicode_AsUTF8
+#define PyInt_FromLong PyLong_FromLong
+#define PyInt_AS_LONG PyLong_AsLong
+#define PyInt_Type PyLong_Type
+#define PyInt_Check PyLong_Check
 #else
 #define PyStr2UTF8 PyString_AsString
 #endif
