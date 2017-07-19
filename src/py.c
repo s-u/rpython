@@ -1,7 +1,22 @@
 #include <string.h>
-
 #include <Python.h>
 #include <Rinternals.h>
+
+#if PY_MAJOR_VERSION >= 3
+#define PyString_Check PyBytes_Check
+#define PyString_AsString PyBytes_AsString
+#define PyStr2UTF8 PyUnicode_AsUTF8
+#else
+#define PyStr2UTF8 PyString_AsString
+#endif
+
+static PyObject *CHAR2Py(SEXP sWhat) {
+    const char *utf8 = translateCharUTF8(sWhat);
+    PyObject *o = PyUnicode_DecodeUTF8(utf8, strlen(utf8), 0);
+    if (!o)
+	Rf_error("invalid string - cannot be converted to valid UTF-8");
+    return o;
+}
 
 static char *pyhome_buf, *pyprog_buf;
 static PyObject *main_dict;
@@ -39,8 +54,8 @@ static void chk_ex(PyObject *o) {
 	    SEXP val;
 	    R_PreserveObject(rpy_last_exception);
 	    if ((val = getAttrib(rpy_last_exception, install("value"))) != R_NilValue)
-		desc = PyString_AsString(PyObject_Str(unwrap_py(val)));
-	    Rf_error("Python exception: %s %s", PyString_AsString(PyObject_Str(unwrap_py(rpy_last_exception))), desc);
+		desc = PyStr2UTF8(PyObject_Str(unwrap_py(val)));
+	    Rf_error("Python exception: %s %s", PyStr2UTF8(PyObject_Str(unwrap_py(rpy_last_exception))), desc);
 	}
     }
 }
@@ -135,14 +150,24 @@ static SEXP unwrap_rcaps(PyObject *o) {
 static SEXP py2CHAR(PyObject *o) {
     if (PyUnicode_Check(o)) {
 	SEXP res;
+#if PY_MAJOR_VERSION < 3
+	/* in 2.x it has to go from Uni to UTF8 bytes to C */
 	o = PyUnicode_AsUTF8String(o);
 	res = mkCharCE(PyString_AsString(o), CE_UTF8);
 	Py_DECREF(o);
+#else
+	/* in 3.3+ we have PyUnicode_AsUTF8 */
+	Py_ssize_t s_size = 0;
+	return mkCharLenCE(PyUnicode_AsUTF8AndSize(o, &s_size), s_size, CE_UTF8);
+#endif
 	return res;
     }
     if (PyString_Check(o))
 	return mkChar(PyString_AsString(o));
-    return mkChar(PyString_AsString(PyObject_Str(o)));
+    /* FIXME: this can in theory be infinite recursion,
+       but it should never be the case if PyObject_Str
+       does what it's documented to do ... */
+    return py2CHAR(PyObject_Str(o));
 }
 
 static int is_homogeneous_list(PyObject *o) {
@@ -172,9 +197,16 @@ static SEXP py_scalar(PyObject *o) {
 	return R_NilValue;
     if (PyUnicode_Check(o)) {
 	SEXP res;
-	o = PyUnicode_AsUTF8String(o);
-	res = mkString(PyString_AsString(o));
-	Py_DECREF(o);
+#if PY_MAJOR_VERSION < 3
+        /* in 2.x it has to go from Uni to UTF8 bytes to C */
+        o = PyUnicode_AsUTF8String(o);
+        res = mkCharCE(PyString_AsString(o), CE_UTF8);
+        Py_DECREF(o);
+#else
+        /* in 3.3+ we have PyUnicode_AsUTF8 */
+        Py_ssize_t s_size = 0;
+        return mkCharLenCE(PyUnicode_AsUTF8AndSize(o, &s_size), s_size, CE_UTF8);
+#endif
 	return res;
     }
     if (PyString_Check(o))
@@ -238,13 +270,13 @@ static SEXP py_to_sexp(PyObject *o) {
 		for (i = 0; i < n; i++)
 		    v[i] = PyFloat_AS_DOUBLE(PyTuple_GetItem(o, i));
 		return res;
-	    } else if (type == &PyString_Type) {
+	    } else if (type == &PyUnicode_Type || type == &PyString_Type) {
 		res = PROTECT(allocVector(STRSXP, n));
 		for (i = 0; i < n; i++)
-		    SET_STRING_ELT(res, i, mkChar(PyString_AsString(PyTuple_GetItem(o, i))));
+		    SET_STRING_ELT(res, i, py2CHAR(PyTuple_GetItem(o, i)));
 		UNPROTECT(1);
 		return res;
-	    }
+	    } /* FIXME: bytes in py3? */
 	} /* homogeneous */
 
 	res = PROTECT(allocVector(VECSXP, n));
@@ -291,13 +323,13 @@ static SEXP py_to_sexp(PyObject *o) {
 		for (i = 0; i < n; i++)
 		    v[i] = PyFloat_AS_DOUBLE(PyList_GetItem(o, i));
 		return res;
-	    } else if (type == &PyString_Type) {
+	    } else if (type == &PyUnicode_Type || type == &PyString_Type) {
 		res = PROTECT(allocVector(STRSXP, n));
 		for (i = 0; i < n; i++)
-		    SET_STRING_ELT(res, i, mkChar(PyString_AsString(PyList_GetItem(o, i))));
+		    SET_STRING_ELT(res, i, py2CHAR(PyList_GetItem(o, i)));
 		UNPROTECT(1);
 		return res;
-	    }
+	    } /* FIXME: PyBytes in py3 ? */
 	} /* homogeneous */
 	
 	res = PROTECT(allocVector(VECSXP, n));
@@ -401,7 +433,7 @@ static PyObject *mk_py_str2list(SEXP sWhat) {
     int i, n = LENGTH(sWhat);
     PyObject *o = PyList_New(n);
     for (i = 0; i < n; i++)
-	PyList_SetItem(o, i, PyString_FromString(CHAR(STRING_ELT(sWhat, i))));
+	PyList_SetItem(o, i, CHAR2Py(STRING_ELT(sWhat, i)));
     return o;
 }
 
@@ -424,16 +456,16 @@ static PyObject *to_pyref(SEXP sWhat) {
 		Rf_error("names mismatch");
 	    o = PyDict_New();
 	    for (i = 0; i < n; i++)
-		PyDict_SetItemString(o, CHAR(STRING_ELT(sNames, i)), PyString_FromString(CHAR(STRING_ELT(sWhat, i))));
+		PyDict_SetItemString(o, CHAR(STRING_ELT(sNames, i)), CHAR2Py(STRING_ELT(sWhat, i)));
 	    return o;
 	} else {
 	    PyObject *o;
 	    /* python doesn't have proper vector support so we have to worry about scalars ...*/
 	    if (n == 1)
-		return PyString_FromString(CHAR(STRING_ELT(sWhat, 0)));
+		return CHAR2Py(STRING_ELT(sWhat, 0));
 	    o = PyTuple_New(n);
 	    for (i = 0; i < n; i++)
-		PyTuple_SetItem(o, i, PyString_FromString(CHAR(STRING_ELT(sWhat, i))));
+		PyTuple_SetItem(o, i, CHAR2Py(STRING_ELT(sWhat, i)));
 	    return o;
 	}
     }
@@ -634,9 +666,9 @@ static void rcaps_free(PyObject *o) {
     free(name);
 }
 
-/* FIXME: it woudl be nice if we could use the same ref objects as rpy2
+/* FIXME: it would be nice if we could use the same ref objects as rpy2
    to allow inter-operability */
-PyObject *wrap_rcaps(SEXP sWhat, SEXP sName) {
+static PyObject *wrap_rcaps(SEXP sWhat, SEXP sName) {
     const char *name = 0;
     PyObject *cap;
     if (TYPEOF(sName) == STRSXP && LENGTH(sName) > 0)
@@ -654,12 +686,12 @@ SEXP rpy_as_string(SEXP sRef) {
     PyObject *o;
     if (!is_valid_pyref(sRef)) Rf_error("invalid python reference");
     o = unwrap_py(sRef);
-    if (!PyString_Check(o)) { /* call str() on the object */
+    if (!PyString_Check(o) && !PyUnicode_Check(o)) { /* call str() on the object */
 	SEXP res;
 	o = PyObject_Str(o);
-	res = mkString(PyString_AsString(o));
+	res = ScalarString(py2CHAR(o));
 	Py_DECREF(o);
 	return res;
     }
-    return mkString(PyString_AsString(o));
+    return ScalarString(py2CHAR(o));
 }
